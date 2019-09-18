@@ -11,12 +11,13 @@ library(tidyverse)
 library(httr)
 #install.packages("rjstat")
 library(rjstat)
+library(lubridate)
 #Dinstall.packages("stringr", dependencies=TRUE)
 library(stringr)
 
 
 ```
-#Importation of dataset
+## Importation of dataset
 
 ```{r}
 csv_counties <- "http://data.ssb.no/api/v0/dataset/95274.json?lang=no"
@@ -28,28 +29,203 @@ countries <- fromJSONstat(content(countries, "text"))
 counties <- counties[[1]]
 countries <- countries[[1]]
 ```
-#Change as date the countrie dataset
+## Change as date the countrie dataset
 
 ```{r}
 countries$måned <- as.character(countries$måned)
 countries$måned <-as.Date(paste(str_sub(countries$måned, 1, 4), str_sub(countries$måned, 6, 8), 1, sep="-"), "%Y-%m-%d")
 
 ```
-#Change as date the countie dataset
+## Change as date the countie dataset
 
 ```{r}
 counties$måned <- as.character(counties$måned)
 counties$måned <-as.Date(paste(str_sub(counties$måned, 1, 4), str_sub(counties$måned, 6, 8), 1, sep="-"), "%Y-%m-%d")
 ```
-#Change the countries label
+## Change the countries label
 
 ```{r}
 countries$statistikkvariabel <- recode(countries$statistikkvariabel, "Kapasitetsutnytting av senger (prosent)" = "Beds percentage capacity utilization", "Kapasitetsutnytting av rom (prosent)" = "Rooms percentage capacity utilization","Pris per rom (kr)" =	"Price per room (kr)" )
 ```
-#Change the counties label
+## Change the counties label
 ```{r}
 counties$statistikkvariabel <- recode(counties$statistikkvariabel, "Kapasitetsutnytting av senger (prosent)" = "Beds percentage capacity utilization", "Kapasitetsutnytting av rom (prosent)" = "Rooms percentage capacity utilization","Pris per rom (kr)" =	"Price per room (kr)" )
 
 ```
+## Merge the two dataframe
+```{r}
+mix <- rbind(countries, counties)
+```
+
+## Calculate average room price
+
+```{r}
+mix$month <- format(mix$måned,"%m")
+
+dataCountrie <- mix %>% filter (region=="Hele landet", value !=0.0 , statistikkvariabel == "Price per room (kr)" ) %>% group_by(month) %>% summarize(mean_room_countrie=mean(value))
+
+dataCountie <- mix %>% filter (region!="Hele landet", value !=0.0 , statistikkvariabel == "Price per room (kr)" ) %>% group_by(month) %>% summarize(mean_room_countie=mean(value))
+  
+```
+## Average room price in the countrie by month 
+```{r}
+print(dataCountrie)
+```
+## Average room price in the counties by month 
+```{r}
+print(dataCountie)
+```
+## Difference of room price in the counties and in the countrie
+
+```{r}
+dif <- left_join(dataCountrie,dataCountie, by="month")
+dif$difference <- dif$mean_room_countrie - dif$mean_room_countie
+print(dif)
+```
+## Difference of room price by counties and by countrie
+```{r}
+meanCountie <- mix %>% filter (value !=0.0 , statistikkvariabel == "Price per room (kr)" ) %>% group_by(region) %>% summarize(mean_room_countie=mean(value))
+
+meanCountrie <- meanCountie %>% filter(region=="Hele landet") %>% select(mean_room_countie)
+meanCountrie <- as.numeric(meanCountrie)
+meanCountie$difference <- meanCountie$mean_room_countie - meanCountrie
+print(meanCountie)
+highest_pos <- max(meanCountie$difference)
+highest_pos <- meanCountie %>% filter(difference==highest_pos) %>% select(region)
+highest_neg <- min (meanCountie$difference)
+highest_neg <- meanCountie %>% filter(difference==highest_neg) %>% select(region)
+```
+The highest positive difference in price is the region `r highest_pos` and the highest negative difference in price is in `r highest_neg`. 
+
+# Highest positive and negative difference per county and per year
+```{r}
+mix$year <- format(mix$måned,"%Y")
+meanCountieByYears <- mix %>% filter (region!="Hele landet" , value !=0.0 , statistikkvariabel == "Price per room (kr)") %>% group_by(region, year) %>% summarize(mean_room_countie=mean(value))
+meanCountieByYears$difference <- meanCountieByYears$mean_room_countie - meanCountrie
+highest_pos <- max(meanCountieByYears$difference)
+highest_pos_RegionYear <- meanCountieByYears %>% filter(difference==highest_pos) %>% select(region, year)
+highest_neg <- min (meanCountieByYears$difference)
+highest_neg_RegionYear <- meanCountieByYears %>% filter(difference==highest_neg) %>% select(region, year)
+
+```
+The highest positive difference in price is the region `r highest_pos_RegionYear` and the highest negative difference in price are in `r highest_neg_RegionYear`.
+
+## Plot of the monthly price difference for Troms county from 1999 until today
+```{r}
+priceTroms <- mix %>% filter (region=="Troms - Romsa", year>1998, value !=0.0 , statistikkvariabel == "Price per room (kr)") %>% group_by(month)%>% summarize(mean_room_countie=mean(value))
+priceTroms$difference <- priceTroms$mean_room_countie - meanCountrie
+
+plot( x= priceTroms$month, y = priceTroms$difference,cex.lab=0.75, cex.main=0.75, type = "l", col="blue",
+     xlab="Month", 
+     ylab="Room price difference", 
+     main="Difference of average country's room price compared to average counties's room price by month")
+
+```
+
+## Relationship between room capacity and price since January 2010 per connties
+
+```{r}
+roomCapacity <- mix %>% filter(year>2009, statistikkvariabel =="Rooms percentage capacity utilization", value !=0.0) %>% group_by(region,year) %>% summarize(mean_capacity=mean(value))
+ggplot(data = roomCapacity, aes(x=year, y=mean_capacity, group=region)) + 
+   geom_line(aes(col=region)) + labs(title="Room capacity percentage per years",
+       x="Year", y = "Capacity(%)")
+
+roomPrice <- mix %>% filter(year>2009, statistikkvariabel =="Price per room (kr)", value !=0.0) %>% group_by(region,year) %>% summarize(mean_price=mean(value))
+ggplot(data = roomPrice, aes(x=year, y=mean_price, group=region)) + 
+   geom_line(aes(col=region)) + labs(title="Room price per years",
+       x="Year", y = "Price (kr)")
 
 
+```
+
+It seems that the price of rooms and their capacity are correlated. But it is difficult to say with these graphics. We need to study a few regions in particular.
+
+## Comparaison with Akershus regions
+
+```{r}
+compare <- merge(roomPrice,roomCapacity,by=c("region","year"))
+
+Akershus <- compare %>% filter(region=="Akershus")
+
+ggplot(data = Akershus, aes(x=year, y=mean_price, group=region)) + 
+   geom_line(aes(col=region)) + labs(title="Price room at Akershus",
+       x="Year", y="Price")
+ggplot(data = Akershus, aes(x=year, y=mean_capacity, group=region)) + 
+   geom_line(aes(col=region)) + labs(title="Capacity room at Akershus",
+       x="Year", y="Capacity")
+
+```
+
+## Comparaison with Aust-Agder regions
+
+```{r}
+
+
+Aust<- compare %>% filter(region=="Aust-Agder")
+
+ggplot(data = Aust, aes(x=year, y=mean_price, group=region)) + 
+   geom_line(aes(col=region)) + labs(title="Price room at Aust-Agder",
+       x="Year", y="Price")
+ggplot(data = Aust, aes(x=year, y=mean_capacity, group=region)) + 
+   geom_line(aes(col=region)) + labs(title="Capacity room at Aust-Agder",
+       x="Year", y="Capacity")
+
+```
+
+## Comparaison with Buskerud regions
+```{r}
+
+Buskerud <- compare %>% filter(region=="Buskerud")
+
+ggplot(data =Buskerud, aes(x=year, y=mean_price, group=region)) + 
+   geom_line(aes(col=region)) + labs(title="Price room at Buskerud",
+       x="Year", y="Price")
+ggplot(data = 	Buskerud, aes(x=year, y=mean_capacity, group=region)) + 
+   geom_line(aes(col=region)) + labs(title="Capacity room at Buskerud",
+       x="Year", y="Capacity")
+
+```
+
+## Comparaison with Finnmark - Finnmárku regions
+```{r}
+
+Finnmark <- compare %>% filter(region=="Finnmark - Finnmárku")
+
+ggplot(data =	Finnmark, aes(x=year, y=mean_price, group=region)) + 
+   geom_line(aes(col=region)) + labs(title="Price room at 	Finnmark - Finnmárku",
+       x="Year", y="Price")
+ggplot(data = Finnmark, aes(x=year, y=mean_capacity, group=region)) + 
+   geom_line(aes(col=region)) + labs(title="Capacity room at 	Finnmark - Finnmárku",
+       x="Year", y="Capacity")
+
+```
+
+## Comparaison with 	Hedmarkregions
+```{r}
+
+Hedmark <- compare %>% filter(region=="Hedmark")
+
+ggplot(data =Hedmark, aes(x=year, y=mean_price, group=region)) + 
+   geom_line(aes(col=region)) + labs(title="Price room at 	Hedmark",
+       x="Year", y="Price")
+ggplot(data = Hedmark, aes(x=year, y=mean_capacity, group=region)) + 
+   geom_line(aes(col=region)) + labs(title="Capacity room at 	Hedmark",
+       x="Year", y="Capacity")
+
+```
+
+## Comparaison with Nordland regions
+```{r}
+
+Nordland <- compare %>% filter(region=="Nordland")
+
+ggplot(data =Nordland, aes(x=year, y=mean_price, group=region)) + 
+   geom_line(aes(col=region)) + labs(title="Price room at Nordland",
+       x="Year", y="Price")
+ggplot(data = Nordland, aes(x=year, y=mean_capacity, group=region)) + 
+   geom_line(aes(col=region)) + labs(title="Capacity room at Nordland",
+       x="Year", y="Capacity")
+
+```
+
+To conclude the price room and the capacity seem correlated. 

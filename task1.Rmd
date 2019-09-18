@@ -1,0 +1,55 @@
+---
+title: "Task1"
+author: "BasonCamille"
+date: "13/09/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(httr)
+#install.packages("rjstat")
+library(rjstat)
+#Dinstall.packages("stringr", dependencies=TRUE)
+library(stringr)
+
+
+```
+#Importation of dataset
+
+```{r}
+csv_counties <- "http://data.ssb.no/api/v0/dataset/95274.json?lang=no"
+csv_countries <- "http://data.ssb.no/api/v0/dataset/95276.json?lang=no"
+counties <- GET(csv_counties)
+countries <- GET(csv_countries)
+counties <- fromJSONstat(content(counties, "text"))
+countries <- fromJSONstat(content(countries, "text"))
+counties <- counties[[1]]
+countries <- countries[[1]]
+```
+#Change as date the countrie dataset
+
+```{r}
+countries$måned <- as.character(countries$måned)
+countries$måned <-as.Date(paste(str_sub(countries$måned, 1, 4), str_sub(countries$måned, 6, 8), 1, sep="-"), "%Y-%m-%d")
+
+```
+#Change as date the countie dataset
+
+```{r}
+counties$måned <- as.character(counties$måned)
+counties$måned <-as.Date(paste(str_sub(counties$måned, 1, 4), str_sub(counties$måned, 6, 8), 1, sep="-"), "%Y-%m-%d")
+```
+#Change the countries label
+
+```{r}
+countries$statistikkvariabel <- recode(countries$statistikkvariabel, "Kapasitetsutnytting av senger (prosent)" = "Beds percentage capacity utilization", "Kapasitetsutnytting av rom (prosent)" = "Rooms percentage capacity utilization","Pris per rom (kr)" =	"Price per room (kr)" )
+```
+#Change the counties label
+```{r}
+counties$statistikkvariabel <- recode(counties$statistikkvariabel, "Kapasitetsutnytting av senger (prosent)" = "Beds percentage capacity utilization", "Kapasitetsutnytting av rom (prosent)" = "Rooms percentage capacity utilization","Pris per rom (kr)" =	"Price per room (kr)" )
+
+```
+
+
